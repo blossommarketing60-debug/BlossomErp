@@ -1,0 +1,9 @@
+import { redirect } from "next/navigation";
+import Link from "next/link";
+import { createClient } from "@/lib/supabase/server";
+import ImportForm from "./import-form";
+export default async function StudentImportPage({searchParams}:{searchParams:Promise<{success?:string;inserted?:string;skipped?:string;error?:string}>}) {
+ const params=await searchParams; const supabase=await createClient(); const {data:{user}}=await supabase.auth.getUser(); if(!user) redirect("/login");
+ const {data:profile}=await supabase.from("profiles").select("role,active").eq("id",user.id).maybeSingle(); if(!profile?.active||profile.role!=="admin") redirect("/portal");
+ return <main className="dashboard"><header className="dashhead"><div className="brand"><div className="logo">B</div><div><b>Blossom School ERP</b><small>Secure register import</small></div></div><Link className="btn" href="/portal">Back to portal</Link></header><section className="welcome"><div><p className="eyebrow">ADMINISTRATION</p><h1>Import students</h1><p>Academic year 2026–27</p></div></section>{params.success==="1"&&<div className="panel" role="status"><b>Import completed.</b><p>Inserted: {Number(params.inserted||0)} · Existing IDs skipped: {Number(params.skipped||0)}</p><Link href="/portal">Open student directory</Link></div>}{params.error&&<div className="panel" role="alert"><b>Import failed ({params.error}). Check the CSV and retry.</b></div>}<ImportForm/><section className="panel"><h2>Before importing</h2><ul><li>Review names, classes, guardian details and provisional admission numbers.</li><li>Blank dates of birth are allowed; invalid dates must be corrected.</li><li>Existing admission numbers are skipped, not updated.</li><li>Photos must be uploaded separately to private storage.</li></ul><p>Use the prepared CSV file from this conversation.</p></section></main>;
+}
