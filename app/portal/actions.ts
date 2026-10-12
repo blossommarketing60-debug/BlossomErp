@@ -28,8 +28,8 @@ export async function recordPayment(formData: FormData) {
   const studentId = String(formData.get("student_id") || "");
   const amountRupees = Number(formData.get("amount_rupees"));
   const method = String(formData.get("method") || "");
-  const transactionRef = String(formData.get("transaction_ref") || "").trim();
-  const notes = String(formData.get("notes") || "").trim();
+  const transactionRef = String(formData.get("transaction_ref") || "").trim().slice(0,120);
+  const notes = String(formData.get("notes") || "").trim().slice(0,300);
   const methods = ["cash", "upi", "bank_transfer", "card", "cheque", "other"];
   if (!studentId || !Number.isFinite(amountRupees) || amountRupees <= 0 || !Number.isSafeInteger(Math.round(amountRupees * 100)) || !methods.includes(method)) redirect("/portal?error=invalid_payment");
   const { data, error } = await supabase.rpc("record_fee_payment", {
@@ -42,6 +42,7 @@ export async function recordPayment(formData: FormData) {
   });
   if (error) redirect("/portal?error=payment_failed");
   revalidatePath("/portal");
-  const receipt = typeof data === "string" ? data : (data?.receipt_no || data?.receiptNo || "");
+  const first = Array.isArray(data) ? data[0] : data;
+  const receipt = first?.receipt_no || first?.receiptNo || "";
   redirect("/portal?success=payment_recorded" + (receipt ? "&receipt=" + encodeURIComponent(receipt) : ""));
 }
