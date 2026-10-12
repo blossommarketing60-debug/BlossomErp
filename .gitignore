@@ -1,1 +1,9 @@
-node_modules\n.next\nout\nbuild\n.env\n.env.local\n.env.*.local\n*.tsbuildinfo\n.DS_Store\n
+node_modules
+.next
+out
+build
+.env
+.env.local
+.env.*.local
+*.tsbuildinfo
+.DS_Store
