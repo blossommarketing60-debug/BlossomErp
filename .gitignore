@@ -1,0 +1,1 @@
+node_modules\n.next\nout\nbuild\n.env\n.env.local\n.env.*.local\n*.tsbuildinfo\n.DS_Store\n
