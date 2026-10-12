@@ -1,0 +1,74 @@
+-- Blossom School ERP database schema for a NEW Supabase project.
+-- Production project already has an applied schema migration; do not rerun this file on it.
+create extension if not exists pgcrypto;
+create type public.app_role as enum ('admin','accountant','parent');
+create type public.charge_status as enum ('posted','partially_paid','paid','void');
+create type public.payment_status as enum ('pending','confirmed','failed','reversed');
+create type public.payment_method as enum ('cash','upi','bank_transfer','card','cheque','gateway','other');
+create type public.concession_status as enum ('requested','approved','rejected','posted','cancelled');
+
+create table public.schools(id uuid primary key default gen_random_uuid(),name text not null,slug text not null unique,address text not null,timezone text not null default 'Asia/Kolkata',currency char(3) not null default 'INR',created_at timestamptz not null default now());
+create table public.profiles(id uuid primary key references auth.users(id) on delete cascade,school_id uuid not null references public.schools(id),full_name text not null default '',role public.app_role not null default 'parent',active boolean not null default true,created_at timestamptz not null default now());
+create table public.academic_years(id uuid primary key default gen_random_uuid(),school_id uuid not null references public.schools(id),label text not null,start_date date not null,end_date date not null,is_current boolean not null default false,unique(school_id,label),check(end_date>=start_date));
+create table public.students(id uuid primary key default gen_random_uuid(),school_id uuid not null references public.schools(id),academic_year text not null,admission_no text not null,full_name text not null,class_name text not null,section text,active boolean not null default true,created_at timestamptz not null default now(),unique(school_id,admission_no));
+create table public.parent_students(parent_user_id uuid not null references auth.users(id) on delete cascade,student_id uuid not null references public.students(id) on delete cascade,created_at timestamptz not null default now(),primary key(parent_user_id,student_id));
+create table public.fee_plans(id uuid primary key default gen_random_uuid(),school_id uuid not null references public.schools(id),academic_year text not null,class_name text not null,annual_amount_paise bigint not null check(annual_amount_paise>=0),installments integer not null default 4 check(installments>0),created_at timestamptz not null default now(),unique(school_id,academic_year,class_name));
+create table public.installment_templates(id uuid primary key default gen_random_uuid(),school_id uuid not null references public.schools(id),academic_year text not null,term_no integer not null check(term_no between 1 and 4),title text not null,due_date date not null,unique(school_id,academic_year,term_no));
+create table public.student_charges(id uuid primary key default gen_random_uuid(),school_id uuid not null references public.schools(id),student_id uuid not null references public.students(id),academic_year text not null,fee_plan_id uuid references public.fee_plans(id),installment_no integer,description text not null,amount_paise bigint not null check(amount_paise>=0),status public.charge_status not null default 'posted',due_date date,created_by uuid references auth.users(id),created_at timestamptz not null default now());
+create table public.concessions(id uuid primary key default gen_random_uuid(),school_id uuid not null references public.schools(id),student_id uuid not null references public.students(id),charge_id uuid references public.student_charges(id),amount_paise bigint not null check(amount_paise>=0),reason text not null,status public.concession_status not null default 'requested',requested_by uuid references auth.users(id),approved_by uuid references auth.users(id),created_at timestamptz not null default now());
+create table public.payments(id uuid primary key default gen_random_uuid(),school_id uuid not null references public.schools(id),student_id uuid not null references public.students(id),receipt_no text,amount_paise bigint not null check(amount_paise>0),method public.payment_method not null,status public.payment_status not null default 'pending',reference text,paid_at timestamptz,received_by uuid references auth.users(id),created_at timestamptz not null default now(),unique(school_id,receipt_no));
+create table public.payment_allocations(id uuid primary key default gen_random_uuid(),school_id uuid not null references public.schools(id),payment_id uuid not null references public.payments(id) on delete cascade,charge_id uuid not null references public.student_charges(id),amount_paise bigint not null check(amount_paise>0),created_at timestamptz not null default now(),unique(payment_id,charge_id));
+create table public.refunds(id uuid primary key default gen_random_uuid(),school_id uuid not null references public.schools(id),payment_id uuid not null references public.payments(id),amount_paise bigint not null check(amount_paise>0),reason text not null,status text not null default 'requested',approved_by uuid references auth.users(id),created_at timestamptz not null default now());
+create table public.audit_log(id bigint generated always as identity primary key,school_id uuid not null references public.schools(id),actor_id uuid references auth.users(id),action text not null,entity_type text not null,entity_id text,details jsonb not null default '{}'::jsonb,created_at timestamptz not null default now());
+create table public.reconciliation_batches(id uuid primary key default gen_random_uuid(),school_id uuid not null references public.schools(id),uploaded_by uuid references auth.users(id),source_name text not null,status text not null default 'open',row_count integer not null default 0,created_at timestamptz not null default now());
+
+create or replace function public.current_school_id() returns uuid language sql stable security definer set search_path=public as $$ select school_id from public.profiles where id=auth.uid() and active=true limit 1 $$;
+create or replace function public.current_app_role() returns public.app_role language sql stable security definer set search_path=public as $$ select role from public.profiles where id=auth.uid() and active=true limit 1 $$;
+revoke all on function public.current_school_id() from public,anon;
+revoke all on function public.current_app_role() from public,anon;
+grant execute on function public.current_school_id() to authenticated;
+grant execute on function public.current_app_role() to authenticated;
+
+alter table public.schools enable row level security;
+alter table public.profiles enable row level security;
+alter table public.academic_years enable row level security;
+alter table public.students enable row level security;
+alter table public.parent_students enable row level security;
+alter table public.fee_plans enable row level security;
+alter table public.installment_templates enable row level security;
+alter table public.student_charges enable row level security;
+alter table public.concessions enable row level security;
+alter table public.payments enable row level security;
+alter table public.payment_allocations enable row level security;
+alter table public.refunds enable row level security;
+alter table public.audit_log enable row level security;
+alter table public.reconciliation_batches enable row level security;
+
+create policy "school users read own school" on public.schools for select to authenticated using(id=public.current_school_id());
+create policy "users read own profile" on public.profiles for select to authenticated using(id=auth.uid() or (school_id=public.current_school_id() and public.current_app_role() in ('admin','accountant')));
+create policy "admins manage profiles" on public.profiles for all to authenticated using(school_id=public.current_school_id() and public.current_app_role()='admin') with check(school_id=public.current_school_id() and public.current_app_role()='admin');
+create policy "staff read students" on public.students for select to authenticated using(school_id=public.current_school_id() and public.current_app_role() in ('admin','accountant'));
+create policy "staff manage students" on public.students for all to authenticated using(school_id=public.current_school_id() and public.current_app_role() in ('admin','accountant')) with check(school_id=public.current_school_id() and public.current_app_role() in ('admin','accountant'));
+create policy "parents read linked students" on public.students for select to authenticated using(exists(select 1 from public.parent_students ps where ps.student_id=id and ps.parent_user_id=auth.uid()));
+create policy "staff manage parent links" on public.parent_students for all to authenticated using(exists(select 1 from public.students s where s.id=student_id and s.school_id=public.current_school_id()) and public.current_app_role() in ('admin','accountant')) with check(exists(select 1 from public.students s where s.id=student_id and s.school_id=public.current_school_id()) and public.current_app_role() in ('admin','accountant'));
+create policy "parents read own links" on public.parent_students for select to authenticated using(parent_user_id=auth.uid());
+create policy "staff read fee plans" on public.fee_plans for select to authenticated using(school_id=public.current_school_id());
+create policy "admins manage fee plans" on public.fee_plans for all to authenticated using(school_id=public.current_school_id() and public.current_app_role()='admin') with check(school_id=public.current_school_id() and public.current_app_role()='admin');
+create policy "staff read installment templates" on public.installment_templates for select to authenticated using(school_id=public.current_school_id());
+create policy "admins manage installment templates" on public.installment_templates for all to authenticated using(school_id=public.current_school_id() and public.current_app_role()='admin') with check(school_id=public.current_school_id() and public.current_app_role()='admin');
+create policy "staff read charges" on public.student_charges for select to authenticated using(school_id=public.current_school_id() and public.current_app_role() in ('admin','accountant'));
+create policy "parents read linked charges" on public.student_charges for select to authenticated using(exists(select 1 from public.parent_students ps where ps.student_id=student_id and ps.parent_user_id=auth.uid()));
+create policy "staff manage charges" on public.student_charges for all to authenticated using(school_id=public.current_school_id() and public.current_app_role() in ('admin','accountant')) with check(school_id=public.current_school_id() and public.current_app_role() in ('admin','accountant'));
+create policy "staff read concessions" on public.concessions for select to authenticated using(school_id=public.current_school_id() and public.current_app_role() in ('admin','accountant'));
+create policy "admins manage concessions" on public.concessions for all to authenticated using(school_id=public.current_school_id() and public.current_app_role()='admin') with check(school_id=public.current_school_id() and public.current_app_role()='admin');
+create policy "staff read payments" on public.payments for select to authenticated using(school_id=public.current_school_id() and public.current_app_role() in ('admin','accountant'));
+create policy "parents read linked payments" on public.payments for select to authenticated using(exists(select 1 from public.parent_students ps where ps.student_id=student_id and ps.parent_user_id=auth.uid()));
+create policy "staff manage payments" on public.payments for all to authenticated using(school_id=public.current_school_id() and public.current_app_role() in ('admin','accountant')) with check(school_id=public.current_school_id() and public.current_app_role() in ('admin','accountant'));
+create policy "staff read allocations" on public.payment_allocations for select to authenticated using(school_id=public.current_school_id() and public.current_app_role() in ('admin','accountant'));
+create policy "parents read linked allocations" on public.payment_allocations for select to authenticated using(exists(select 1 from public.payments p join public.parent_students ps on ps.student_id=p.student_id where p.id=payment_id and ps.parent_user_id=auth.uid()));
+create policy "staff manage allocations" on public.payment_allocations for all to authenticated using(school_id=public.current_school_id() and public.current_app_role() in ('admin','accountant')) with check(school_id=public.current_school_id() and public.current_app_role() in ('admin','accountant'));
+create policy "staff read refunds" on public.refunds for select to authenticated using(school_id=public.current_school_id() and public.current_app_role() in ('admin','accountant'));
+create policy "admins manage refunds" on public.refunds for all to authenticated using(school_id=public.current_school_id() and public.current_app_role()='admin') with check(school_id=public.current_school_id() and public.current_app_role()='admin');
+create policy "admins read audit log" on public.audit_log for select to authenticated using(school_id=public.current_school_id() and public.current_app_role()='admin');
+create policy "admins manage reconciliation" on public.reconciliation_batches for all to authenticated using(school_id=public.current_school_id() and public.current_app_role()='admin') with check(school_id=public.current_school_id() and public.current_app_role()='admin');
+insert into public.schools(name,slug,address) values('Blossom Kindergarten Senior Sec. School','blossom-banswara','Kagdi Pick Up, Banswara, Rajasthan, India') on conflict(slug) do nothing;
