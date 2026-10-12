@@ -1,1 +1,3 @@
-/** @type {import('next').NextConfig} */\nconst nextConfig = { poweredByHeader: false };\nexport default nextConfig;\n
+/** @type {import('next').NextConfig} */
+const nextConfig = { poweredByHeader: false };
+export default nextConfig;
