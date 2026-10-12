@@ -3,19 +3,8 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 
 const modules = [
-  { title: "Student records & import", status: "Needs import workflow", detail: "CSV validation, duplicate review, photo matching and import report." },
-  { title: "Fees & receipts", status: "Core workflow present; test required", detail: "Installments, guarded payment posting, balances and receipt ledger." },
-  { title: "Attendance", status: "Database foundation added", detail: "Daily present/absent/late/leave records; teacher workflow and parent alerts still needed." },
-  { title: "Exams & report cards", status: "Database foundation added", detail: "Subject marks, exam records and grading; report-card UI/PDF still needed." },
-  { title: "Transport", status: "Database foundation added", detail: "Routes, vehicle/driver details, student route assignments and transport fee fields." },
-  { title: "Library", status: "Database foundation added", detail: "Book catalogue, loans, due dates and fines; circulation UI still needed." },
-  { title: "Admissions CRM", status: "Database foundation added", detail: "Enquiries, follow-up dates and admission pipeline; staff workflow still needed." },
-  { title: "Notices & announcements", status: "Database foundation added", detail: "Audience-targeted notices; publishing UI and delivery integrations still needed." },
-  { title: "Student document vault", status: "Database foundation added", detail: "Document metadata is ready; private storage, upload and signed access still needed." },
-  { title: "Parent portal & notifications", status: "Partially scaffolded", detail: "Parent-linked student view exists; secure notices, attendance, results and messaging remain." },
-  { title: "Analytics & reports", status: "Needs implementation", detail: "Collection summaries, attendance trends, admission funnel and exportable reports." },
-  { title: "WhatsApp integration", status: "Not connected", detail: "Requires provider account, consent controls, templates and delivery logging." },
-  { title: "Hindi/English", status: "Not implemented", detail: "Add translated UI strings and language preference." },
+  { title: "Student register", status: "Import and verify", detail: "CSV import, duplicate checks and student photo matching." },
+  { title: "Fees & receipts", status: "Core workflow; testing required", detail: "Installments, balances, payment posting and receipt ledger." },
 ];
 
 export default async function ModulesPage() {
