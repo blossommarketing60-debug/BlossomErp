@@ -1,6 +1,7 @@
 import {redirect} from "next/navigation";
 import {createClient} from "@/lib/supabase/server";
 import {signOut} from "./signout";
+import Link from "next/link";
 import {generateInstallments,recordPayment} from "./actions";
 
 const rupees=(paise:number|string)=>new Intl.NumberFormat("en-IN",{style:"currency",currency:"INR",maximumFractionDigits:2}).format(Number(paise||0)/100);
@@ -24,9 +25,14 @@ export default async function PortalPage({searchParams}:{searchParams:Promise<{s
  const {data:balances}=await supabase.from("student_fee_balances").select("student_id,net_charges_paise,paid_paise,balance_paise").eq("school_id",profile.school_id).eq("academic_year","2026-27");
  const balanceByStudent=new Map((balances||[]).map((b:any)=>[b.student_id,b]));
  const canCollect=["admin","accountant"].includes(profile.role);
+ const totalCharged=(balances||[]).reduce((n:any,b:any)=>n+Number(b.net_charges_paise||0),0);
+ const totalPaid=(balances||[]).reduce((n:any,b:any)=>n+Number(b.paid_paise||0),0);
+ const totalOutstanding=(balances||[]).reduce((n:any,b:any)=>n+Number(b.balance_paise||0),0);
+ const studentsWithDue=(balances||[]).filter((b:any)=>Number(b.balance_paise||0)>0).length;
+ const studentsClear=(balances||[]).filter((b:any)=>Number(b.balance_paise||0)<=0&&Number(b.net_charges_paise||0)>0).length;
  const messages:Record<string,string>={installments_generated:"Installments generated or already existed.",payment_recorded:"Payment recorded successfully.",not_authorized:"Your role is not permitted to do that.",missing_student:"Please select a student.",installments_failed:"Could not generate installments. Check the fee plan and installment dates.",invalid_payment:"Check the payment amount and method.",payment_failed:"Payment was not posted. Check the outstanding balance and try again."};
  return <main className="dashboard">
- <header className="dashhead"><div className="brand"><div className="logo">B</div><div><b>Blossom School ERP</b><small>Academic year 2026–27</small></div></div><form action={signOut}><button className="btn">Sign out</button></form></header>
+ <header className="dashhead"><div className="brand"><div className="logo">B</div><div><b>Blossom School ERP</b><small>Academic year 2026–27</small></div></div><div className="headactions">{profile.role==="admin"&&<Link className="btn" href="/portal/import">Import students</Link>}<form action={signOut}><button className="btn">Sign out</button></form></div></header>
  <section className="welcome"><div><p className="eyebrow">{profile.role.toUpperCase()} PORTAL</p><h1>Hello, {profile.full_name||user.email}</h1><p>Blossom Kindergarten Senior Sec. School · Banswara, Rajasthan</p></div></section>
  {params.success&&<div className="panel" role="status"><b>{messages[params.success]||"Completed."}</b>{params.receipt&&<p>Receipt: {params.receipt}</p>}</div>}
  {params.error&&<div className="panel" role="alert"><b>{messages[params.error]||"The request could not be completed."}</b><p className="muted">No success is shown unless the database operation completes.</p></div>}
